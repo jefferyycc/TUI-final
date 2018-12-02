@@ -14,22 +14,34 @@
 
 #define BRIGHTNESS  200
 #define FRAMES_PER_SECOND 60
+#define SAMPLE_WINDOW   10  // Sample window for average level
 
 bool gReverseDirection = false;
 
 // Output
 //int led_A_Pin  = 13;   // LED,   connected to digital pin 9
 //int led_B_Pin  = 12;   // LED,   connected to digital pin 9
-int fs_A_Pin   = A0;   // 
-int fs_B_Pin   = A1;   // 
+int motor_A_Pin = 9;
+int motor_B_Pin = 10;
 
 // Input 
-
+int fs_A_Pin   = A0;   // 
+int fs_B_Pin   = A1; 
+int mic_A_Pin  = A2; 
+int mic_B_Pin  = A3; 
 
 // Program variables
 CRGB leds[NUM_LEDS];
 CRGBPalette16 gPal;
-int DEBUG = 0; // DEBUG counter; if set to 1, will write values back via serial
+int DEBUG = 1; // DEBUG counter; if set to 1, will write values back via serial
+int motor_A_Val = 0; // motor control
+int motor_B_Val = 0; // motor control
+int pre_motr_val = 10;
+int fs_A_Val = 0;    // val for the force sensor
+int fs_B_Val = 0;
+int mic_A_Val = 0;    // val for the force sensor
+int mic_B_Val = 0;
+unsigned int sample;
 
 void setup() {
   // sets the pins as Output
@@ -41,6 +53,15 @@ void setup() {
   FastLED.setBrightness( BRIGHTNESS );
   gPal = HeatColors_p;
 
+  pinMode(motor_A_Pin,   OUTPUT);
+  pinMode(motor_B_Pin,   OUTPUT);
+
+  // sets the pins as Input
+  pinMode(fs_A_Pin, INPUT);
+  pinMode(fs_B_Pin, INPUT);
+  pinMode(mic_A_Pin, INPUT);
+  pinMode(mic_B_Pin, INPUT);
+
   // Begin the Serial at 9600 Baud
   if (DEBUG) {           // If we want to see the pin values for debugging...
     Serial.begin(9600);  // ...set up the serial ouput on 0004 style
@@ -50,10 +71,54 @@ void setup() {
 
 // Main program
 void loop() {
+  // Outputs
   random16_add_entropy(random());
   Fire2012WithPalette(); // run simulation frame, using palette colors
   FastLED.show(); // display this frame
   FastLED.delay(1000 / FRAMES_PER_SECOND);
+
+  //motorCtrlVal = map(potVal, 0, 1024, 0, 255);
+  motor_A_Val = pre_motr_val; // rang [0, 255]
+  motor_B_Val = motor_A_Val;
+  Serial.print("motor_A_lVal: ");Serial.println(motor_A_Val);
+  Serial.print("motor_B_lVal: ");Serial.println(motor_B_Val);
+  analogWrite(motor_A_Pin, motor_A_Val);
+  analogWrite(motor_B_Pin, motor_B_Val);
+
+  // Inputs
+  fs_A_Val = analogRead(fs_A_Pin);
+  fs_B_Val = analogRead(fs_B_Pin);
+  Serial.print(" fs_A_Val: ");Serial.println(fs_A_Val);
+  Serial.print(" fs_B_Val: ");Serial.println(fs_B_Val);
+  //delay (1000);
+
+  // Microphone
+  unsigned long startMillis= millis();  // Start of sample window
+  float peakToPeak = 0;   // peak-to-peak level
+  unsigned int signalMax = 0;
+  unsigned int signalMin = 1023;
+  unsigned int c, y;
+
+  // collect data for length of sample window (in mS)
+  while (millis() - startMillis < SAMPLE_WINDOW)
+  {
+    sample = analogRead(mic_A_Pin);
+    if (sample < 1024)  // toss out spurious readings
+    {
+      if (sample > signalMax)
+      {
+        signalMax = sample;  // save just the max levels
+      }
+      else if (sample < signalMin)
+      {
+        signalMin = sample;  // save just the min levels
+      }
+    }
+  }
+  peakToPeak = signalMax - signalMin;  // max - min = peak-peak amplitude
+  Serial.print(" peakToPeak: ");Serial.println(peakToPeak);
+//   Serial.print(" sample: ");Serial.println(sample);
+  delay(200);
   
 }
 
